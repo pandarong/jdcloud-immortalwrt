@@ -39,7 +39,7 @@ jobs:
           libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
           ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils \
           python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs \
-          upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+          upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd libxcrypt-dev
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
@@ -61,6 +61,15 @@ jobs:
         [ -e $CONFIG_FILE ] && cp $CONFIG_FILE $OPENWRT_PATH/.config
         chmod +x $DIY_SCRIPT
         cd $OPENWRT_PATH
+        
+        # 修复 GCC libsanitizer 编译问题 (crypt.h 缺失)
+        # 方法1: 禁用 libsanitizer (推荐,适用于大多数情况)
+        sed -i 's/--enable-libsanitizer/--disable-libsanitizer/g' toolchain/gcc/common.mk
+        
+        # 方法2: 如果方法1不生效,注释掉下面这行来尝试
+        # echo "CONFIG_TOOLCHAINOPTS=y" >> .config
+        # echo "CONFIG_GCC_ENABLE_LIBSANITIZER is not set" >> .config
+        
         $GITHUB_WORKSPACE/$DIY_SCRIPT
 
     - name: 下载编译依赖
@@ -75,7 +84,14 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        
+        # 首次尝试多线程编译
+        make -j$(nproc) || {
+          echo "多线程编译失败,尝试单线程编译..."
+          # 清理后单线程详细输出编译
+          make -j1 V=s
+        }
+        
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
