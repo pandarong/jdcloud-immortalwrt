@@ -68,7 +68,7 @@ jobs:
           
           # 修复 3: 安装 libxcrypt 相关文件
           sudo apt-get update -qq
-          sudo apt-get install -y libxcrypt-dev
+          sudo apt-get install -y libcrypt-dev
           
           echo "glibc 修复已应用"
         else
