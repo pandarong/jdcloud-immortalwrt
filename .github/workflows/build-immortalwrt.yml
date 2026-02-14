@@ -55,9 +55,28 @@ jobs:
         chmod +x $DIY_SCRIPT
         cd $OPENWRT_PATH
         
-        # 预防性修复: 禁用 libsanitizer 避免潜在的编译问题
-        if [ -f "toolchain/gcc/common.mk" ]; then
+        # 检测是否使用 glibc
+        if grep -q "CONFIG_LIBC_USE_GLIBC=y" .config 2>/dev/null; then
+          echo "检测到使用 glibc,应用 glibc 专用修复..."
+          
+          # 修复 1: 禁用 libsanitizer (glibc 必须)
           sed -i 's/--enable-libsanitizer/--disable-libsanitizer/g' toolchain/gcc/common.mk
+          
+          # 修复 2: 在配置中强制禁用 libsanitizer
+          sed -i '/CONFIG_GCC_ENABLE_LIBSANITIZER/d' .config
+          echo "# CONFIG_GCC_ENABLE_LIBSANITIZER is not set" >> .config
+          
+          # 修复 3: 安装 libxcrypt 相关文件
+          sudo apt-get update -qq
+          sudo apt-get install -y libxcrypt-dev
+          
+          echo "glibc 修复已应用"
+        else
+          echo "使用 musl,应用标准修复..."
+          # 预防性修复: 禁用 libsanitizer
+          if [ -f "toolchain/gcc/common.mk" ]; then
+            sed -i 's/--enable-libsanitizer/--disable-libsanitizer/g' toolchain/gcc/common.mk
+          fi
         fi
         
         $GITHUB_WORKSPACE/$DIY_SCRIPT
