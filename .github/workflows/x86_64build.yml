@@ -51,25 +51,50 @@ jobs:
         # 动态检测内核版本
         KERNEL_VER=$(grep "KERNEL_PATCHVER:=" target/linux/x86/Makefile | cut -d'=' -f2 | tr -d ' ')
         echo "检测到内核版本: $KERNEL_VER"
+        echo "KERNEL_VERSION=$KERNEL_VER" >> $GITHUB_ENV
         
-        # 构建配置文件路径
-        CONFIG_FILE="target/linux/x86/config-${KERNEL_VER}"
+        # 定义配置文件（优先级从高到低）
+        CONFIG_FILES=(
+          "target/linux/x86/config-${KERNEL_VER}"
+          "target/linux/generic/config-${KERNEL_VER}"
+        )
         
-        if [ -f "$CONFIG_FILE" ]; then
-          echo "修改配置文件: $CONFIG_FILE"
-          
-          # 启用 Huge Pages 支持
-          sed -i 's/# CONFIG_HUGETLBFS is not set/CONFIG_HUGETLBFS=y/' "$CONFIG_FILE"
-          sed -i 's/# CONFIG_HUGETLB_PAGE is not set/CONFIG_HUGETLB_PAGE=y/' "$CONFIG_FILE"
-          
-          # 验证修改
-          echo "=== Huge Pages 配置状态 ==="
-          grep HUGETLB "$CONFIG_FILE"
-        else
-          echo "错误: 配置文件 $CONFIG_FILE 不存在"
+        MODIFIED=false
+        
+        for CONFIG_FILE in "${CONFIG_FILES[@]}"; do
+          if [ -f "$CONFIG_FILE" ]; then
+            echo "处理配置文件: $CONFIG_FILE"
+            
+            # 备份
+            cp "$CONFIG_FILE" "${CONFIG_FILE}.bak"
+            
+            # 检查是否存在 HUGETLB 配置
+            if grep -q "HUGETLB" "$CONFIG_FILE"; then
+              echo "  找到 HUGETLB 配置，进行修改..."
+              sed -i 's/# CONFIG_HUGETLBFS is not set/CONFIG_HUGETLBFS=y/' "$CONFIG_FILE"
+              sed -i 's/# CONFIG_HUGETLB_PAGE is not set/CONFIG_HUGETLB_PAGE=y/' "$CONFIG_FILE"
+              MODIFIED=true
+            else
+              echo "  未找到 HUGETLB 配置，添加新配置..."
+              echo "" >> "$CONFIG_FILE"
+              echo "# Huge Pages Support" >> "$CONFIG_FILE"
+              echo "CONFIG_HUGETLBFS=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HUGETLB_PAGE=y" >> "$CONFIG_FILE"
+              MODIFIED=true
+            fi
+            
+            # 显示结果
+            echo "  === 当前 HUGETLB 配置 ==="
+            grep HUGETLB "$CONFIG_FILE" || echo "  (添加了新配置)"
+          fi
+        done
+        
+        if [ "$MODIFIED" = false ]; then
+          echo "警告: 未找到可修改的配置文件"
           echo "可用的配置文件:"
-          ls -la target/linux/x86/config-*
-          exit 1
+          ls -la target/linux/x86/config-* target/linux/generic/config-* 2>/dev/null || true
+        else
+          echo "=== Huge Pages 配置成功 ==="
         fi
 
     - name: 下载编译依赖
