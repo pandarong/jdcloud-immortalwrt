@@ -44,15 +44,13 @@ jobs:
         [ -e $CONFIG_FILE ] && cp $CONFIG_FILE $OPENWRT_PATH/.config
         cd $OPENWRT_PATH
         
-        # glibc 修复（如果使用 glibc）
-        if grep -q "CONFIG_LIBC_USE_GLIBC=y" .config 2>/dev/null; then
-          echo "应用 glibc 修复..."
-          sed -i 's/--enable-libsanitizer/--disable-libsanitizer/g' toolchain/gcc/common.mk
-          sed -i '/CONFIG_GCC_ENABLE_LIBSANITIZER/d' .config
-          echo "# CONFIG_GCC_ENABLE_LIBSANITIZER is not set" >> .config
-          sudo apt-get update -qq
-          sudo apt-get install -y libcrypt-dev
-        fi
+    - name: 启用内核 Huge Pages
+      run: |
+        cd $OPENWRT_PATH
+        # 直接修改 x86 的内核配置（假设是 6.6 版本）
+        sed -i 's/# CONFIG_HUGETLBFS is not set/CONFIG_HUGETLBFS=y/' target/linux/x86/config-6.6
+        sed -i 's/# CONFIG_HUGETLB_PAGE is not set/CONFIG_HUGETLB_PAGE=y/' target/linux/x86/config-6.6
+        echo "Huge Pages 已启用"
 
     - name: 下载编译依赖
       run: |
